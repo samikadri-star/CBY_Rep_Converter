@@ -1,0 +1,6 @@
+{
+  "name": "محول التقارير",
+  "description": "تطبيق لتحويل تقارير البنوك النصية المشفرة بترميز ISO-8859-6 إلى جداول اكسل متميزة بدعم كامل لليمين واليسار RTL.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
