@@ -99,9 +99,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         repository.insert(item)
                         successCount++
 
-                    } catch (e: Exception) {
-                        e.printStackTrace()
-                        val errMsg = e.localizedMessage ?: "فشل في عملية القراءة أو التحويل."
+                    } catch (t: Throwable) {
+                        t.printStackTrace()
+                        val errMsg = if (t is OutOfMemoryError) {
+                            "الملف كبير جداً وتجاوز حد الذاكرة المتاحة للتطبيق. يُرجى تجزئة الملف ومحاولة تحويله."
+                        } else {
+                            t.localizedMessage ?: "فشل في عملية القراءة أو التحويل."
+                        }
                         localErrors.add("$originalName: $errMsg")
 
                         val failedItem = ConversionItem(
