@@ -90,6 +90,50 @@ object ExcelConverter {
         val sheet = workbook.createSheet("تقرير")
         sheet.setRightToLeft(true) // RTL layout for Arabic excel sheets
 
+        var skipColumnIndex: Int? = null
+        val isCir1Samo = originalName.lowercase(Locale.US).startsWith("cir1samo")
+
+        if (isCir1Samo) {
+            val columnValues = mutableMapOf<Int, MutableList<String>>()
+            try {
+                contentResolver.openInputStream(inputUri)?.use { analysisStream ->
+                    val reader = analysisStream.bufferedReader(charset)
+                    var lineCount = 0
+                    while (lineCount < 1000) {
+                        val line = reader.readLine() ?: break
+                        val cleaned = cleanLine(line)
+                        if (cleaned.isNotEmpty()) {
+                            val rowSplit = if (cleaned.contains('\t')) {
+                                cleaned.split('\t')
+                            } else {
+                                cleaned.split('|')
+                            }
+                            for ((idx, cell) in rowSplit.withIndex()) {
+                                val trimmed = cell.trim()
+                                if (trimmed.isNotEmpty()) {
+                                    val list = columnValues.getOrPut(idx) { mutableListOf() }
+                                    list.add(trimmed)
+                                }
+                            }
+                        }
+                        lineCount++
+                    }
+                }
+            } catch (ignored: Exception) {}
+
+            for ((colIdx, values) in columnValues) {
+                val parsedValues = values.mapNotNull { 
+                    it.replace(",", "").toDoubleOrNull()
+                }
+                if (parsedValues.isNotEmpty() && parsedValues.all { 
+                    it == 999.0 || it == 1.0 || it == 5.0
+                }) {
+                    skipColumnIndex = colIdx
+                    break
+                }
+            }
+        }
+
         var excelRowIndex = 0
         var hasAtLeastOneRow = false
 
@@ -108,9 +152,13 @@ object ExcelConverter {
                     }
 
                     val excelRow = sheet.createRow(excelRowIndex)
+                    var currentExcelColIndex = 0
                     for ((colIndex, cellVal) in rowSplit.withIndex()) {
+                        if (colIndex == skipColumnIndex) {
+                            continue
+                        }
                         val trimmedVal = cellVal.trim()
-                        val excelCell = excelRow.createCell(colIndex)
+                        val excelCell = excelRow.createCell(currentExcelColIndex)
                         
                         // Attempt numeric parsing if it's purely decimal, to preserve Excel numeric formulas
                         val numericVal = trimmedVal.replace(",", "").toDoubleOrNull()
@@ -119,6 +167,7 @@ object ExcelConverter {
                         } else {
                             excelCell.setCellValue(trimmedVal)
                         }
+                        currentExcelColIndex++
                     }
                     excelRowIndex++
                     hasAtLeastOneRow = true
