@@ -128,6 +128,30 @@ object ExcelConverter {
                             }
                         }
                         rowSplit = newRow
+
+                        // Realign opening balance or totals lines where the Reference (column 1) is missing, causing a shift
+                        val rowText = rowSplit.joinToString(" ")
+                        val isSpecialSummaryRow = rowText.contains("الرصيد المدور") || 
+                                                   rowText.contains("الرصيد دفتري") || 
+                                                   rowText.contains("الرصيد الحالي") || 
+                                                   rowText.contains("رصيد") ||
+                                                   rowText.contains("الاجمالي") ||
+                                                   rowText.contains("اجمالي") ||
+                                                   rowText.contains("الإجمالي") ||
+                                                   rowText.contains("إجمالي") ||
+                                                   rowText.contains("المجموع") ||
+                                                   rowText.contains("مجموع")
+
+                        if (isSpecialSummaryRow && rowSplit.size == 5) {
+                            val aligned = mutableListOf<String>()
+                            aligned.add(rowSplit[0]) // Date / First field
+                            aligned.add("")          // Empty Reference (المرجع) placeholder
+                            aligned.add(rowSplit[1]) // Statement / Label (البيان)
+                            aligned.add(rowSplit[2]) // منه (Debit)
+                            aligned.add(rowSplit[3]) // له (Credit)
+                            aligned.add(rowSplit[4]) // الرصيد (Balance)
+                            rowSplit = aligned
+                        }
                     }
 
                     val excelRow = sheet.createRow(excelRowIndex)
