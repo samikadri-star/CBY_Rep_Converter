@@ -91,9 +91,13 @@ object ExcelConverter {
         sheet.setRightToLeft(true) // RTL layout for Arabic excel sheets
 
         var skipColumnIndex: Int? = null
-        val isCir1Samo = originalName.lowercase(Locale.US).startsWith("cir1samo")
+        val lowercaseName = originalName.lowercase(Locale.US)
+        val isTargetReport = lowercaseName.startsWith("glrfdj") || 
+                             lowercaseName.startsWith("cir1sa") || 
+                             lowercaseName.startsWith("glrddj") || 
+                             lowercaseName.startsWith("cir1samo")
 
-        if (isCir1Samo) {
+        if (isTargetReport) {
             val columnValues = mutableMapOf<Int, MutableList<String>>()
             try {
                 contentResolver.openInputStream(inputUri)?.use { analysisStream ->
@@ -125,9 +129,10 @@ object ExcelConverter {
                 val parsedValues = values.mapNotNull { 
                     it.replace(",", "").toDoubleOrNull()
                 }
-                if (parsedValues.isNotEmpty() && parsedValues.all { 
+                val targetCount = parsedValues.count { 
                     it == 999.0 || it == 1.0 || it == 5.0
-                }) {
+                }
+                if (parsedValues.isNotEmpty() && targetCount >= parsedValues.size * 0.70) {
                     skipColumnIndex = colIdx
                     break
                 }
@@ -157,7 +162,15 @@ object ExcelConverter {
                         if (colIndex == skipColumnIndex) {
                             continue
                         }
-                        val trimmedVal = cellVal.trim()
+                        
+                        var trimmedVal = cellVal.trim()
+                        if (skipColumnIndex != null && colIndex == skipColumnIndex - 1 && skipColumnIndex < rowSplit.size) {
+                            val codeVal = rowSplit[skipColumnIndex].trim()
+                            if (codeVal.isNotEmpty()) {
+                                trimmedVal = "$trimmedVal $codeVal"
+                            }
+                        }
+
                         val excelCell = excelRow.createCell(currentExcelColIndex)
                         
                         // Attempt numeric parsing if it's purely decimal, to preserve Excel numeric formulas
