@@ -90,54 +90,11 @@ object ExcelConverter {
         val sheet = workbook.createSheet("تقرير")
         sheet.setRightToLeft(true) // RTL layout for Arabic excel sheets
 
-        var skipColumnIndex: Int? = null
         val lowercaseName = originalName.lowercase(Locale.US)
         val isTargetReport = lowercaseName.startsWith("glrfdj") || 
                              lowercaseName.startsWith("cir1sa") || 
                              lowercaseName.startsWith("glrddj") || 
                              lowercaseName.startsWith("cir1samo")
-
-        if (isTargetReport) {
-            val columnValues = mutableMapOf<Int, MutableList<String>>()
-            try {
-                contentResolver.openInputStream(inputUri)?.use { analysisStream ->
-                    val reader = analysisStream.bufferedReader(charset)
-                    var lineCount = 0
-                    while (lineCount < 1000) {
-                        val line = reader.readLine() ?: break
-                        val cleaned = cleanLine(line)
-                        if (cleaned.isNotEmpty()) {
-                            val rowSplit = if (cleaned.contains('\t')) {
-                                cleaned.split('\t')
-                            } else {
-                                cleaned.split('|')
-                            }
-                            for ((idx, cell) in rowSplit.withIndex()) {
-                                val trimmed = cell.trim()
-                                if (trimmed.isNotEmpty()) {
-                                    val list = columnValues.getOrPut(idx) { mutableListOf() }
-                                    list.add(trimmed)
-                                }
-                            }
-                        }
-                        lineCount++
-                    }
-                }
-            } catch (ignored: Exception) {}
-
-            for ((colIdx, values) in columnValues) {
-                val parsedValues = values.mapNotNull { 
-                    it.replace(",", "").toDoubleOrNull()
-                }
-                val targetCount = parsedValues.count { 
-                    it == 999.0 || it == 1.0 || it == 5.0
-                }
-                if (parsedValues.isNotEmpty() && targetCount >= parsedValues.size * 0.70) {
-                    skipColumnIndex = colIdx
-                    break
-                }
-            }
-        }
 
         var excelRowIndex = 0
         var hasAtLeastOneRow = false
@@ -150,37 +107,40 @@ object ExcelConverter {
             processingInputStream.bufferedReader(charset).forEachLine { line ->
                 val cleaned = cleanLine(line)
                 if (cleaned.isNotEmpty()) {
-                    val rowSplit = if (cleaned.contains('\t')) {
+                    var rowSplit = if (cleaned.contains('\t')) {
                         cleaned.split('\t')
                     } else {
                         cleaned.split('|')
                     }
+                    rowSplit = rowSplit.map { it.trim() }
 
-                    val excelRow = sheet.createRow(excelRowIndex)
-                    var currentExcelColIndex = 0
-                    for ((colIndex, cellVal) in rowSplit.withIndex()) {
-                        if (colIndex == skipColumnIndex) {
-                            continue
-                        }
-                        
-                        var trimmedVal = cellVal.trim()
-                        if (skipColumnIndex != null && colIndex == skipColumnIndex - 1 && skipColumnIndex < rowSplit.size) {
-                            val codeVal = rowSplit[skipColumnIndex].trim()
-                            if (codeVal.isNotEmpty()) {
-                                trimmedVal = "$trimmedVal $codeVal"
+                    // Apply dynamic merging for special banking reports
+                    if (isTargetReport && rowSplit.size > 1) {
+                        val newRow = mutableListOf<String>()
+                        val mergeTargets = setOf("999", "005", "001", "1", "5")
+                        for (cell in rowSplit) {
+                            if (mergeTargets.contains(cell) && newRow.isNotEmpty()) {
+                                val lastIdx = newRow.size - 1
+                                val lastVal = newRow[lastIdx]
+                                newRow[lastIdx] = if (lastVal.isEmpty()) cell else "$lastVal $cell"
+                            } else {
+                                newRow.add(cell)
                             }
                         }
+                        rowSplit = newRow
+                    }
 
-                        val excelCell = excelRow.createCell(currentExcelColIndex)
+                    val excelRow = sheet.createRow(excelRowIndex)
+                    for ((colIndex, cellVal) in rowSplit.withIndex()) {
+                        val excelCell = excelRow.createCell(colIndex)
                         
                         // Attempt numeric parsing if it's purely decimal, to preserve Excel numeric formulas
-                        val numericVal = trimmedVal.replace(",", "").toDoubleOrNull()
-                        if (numericVal != null && trimmedVal.matches(Regex("^[+-]?[0-9,.\\s]+$"))) {
+                        val numericVal = cellVal.replace(",", "").toDoubleOrNull()
+                        if (numericVal != null && cellVal.matches(Regex("^[+-]?[0-9,.\\s]+$"))) {
                             excelCell.setCellValue(numericVal)
                         } else {
-                            excelCell.setCellValue(trimmedVal)
+                            excelCell.setCellValue(cellVal)
                         }
-                        currentExcelColIndex++
                     }
                     excelRowIndex++
                     hasAtLeastOneRow = true
