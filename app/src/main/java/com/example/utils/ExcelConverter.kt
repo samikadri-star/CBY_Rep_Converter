@@ -116,18 +116,71 @@ object ExcelConverter {
 
                     // Apply dynamic merging for special banking reports
                     if (isTargetReport && rowSplit.size > 1) {
-                        val newRow = mutableListOf<String>()
-                        val mergeTargets = setOf("999", "005", "001", "1", "5")
-                        for (cell in rowSplit) {
-                            if (mergeTargets.contains(cell) && newRow.isNotEmpty()) {
-                                val lastIdx = newRow.size - 1
-                                val lastVal = newRow[lastIdx]
-                                newRow[lastIdx] = if (lastVal.isEmpty()) cell else "$lastVal $cell"
-                            } else {
-                                newRow.add(cell)
+                        val isTotalLine = cleaned.contains("الاجمالي") || 
+                                          cleaned.contains("اجمالي") || 
+                                          cleaned.contains("الإجمالي") || 
+                                          cleaned.contains("إجمالي") || 
+                                          cleaned.contains("المجموع") || 
+                                          cleaned.contains("مجموع") || 
+                                          cleaned.contains("الرصيد") || 
+                                          cleaned.contains("رصيد") || 
+                                          cleaned.contains("TOTAL") || 
+                                          cleaned.contains("Total") || 
+                                          cleaned.contains("total")
+
+                        if (isTotalLine) {
+                            val activeCells = rowSplit.filter { it.isNotEmpty() }
+                            val textCells = activeCells.filter { cell ->
+                                val clean = cell.replace(",", "").trim()
+                                clean.toDoubleOrNull() == null
                             }
+                            val numericCells = activeCells.filter { cell ->
+                                val clean = cell.replace(",", "").trim()
+                                clean.toDoubleOrNull() != null
+                            }
+
+                            val labelText = textCells.joinToString(" ")
+                            val alignedRow = mutableListOf("", "", "", "", "", "")
+                            alignedRow[2] = labelText // place label in Statement/البيان (index 2)
+
+                            if (labelText.contains("رصيد") || labelText.contains("الرصيد")) {
+                                if (numericCells.size == 1) {
+                                    alignedRow[5] = numericCells[0]
+                                } else if (numericCells.size == 2) {
+                                    alignedRow[4] = numericCells[0]
+                                    alignedRow[5] = numericCells[1]
+                                } else if (numericCells.size >= 3) {
+                                    alignedRow[3] = numericCells[0]
+                                    alignedRow[4] = numericCells[1]
+                                    alignedRow[5] = numericCells[2]
+                                }
+                            } else {
+                                if (numericCells.size == 1) {
+                                    alignedRow[3] = numericCells[0]
+                                } else if (numericCells.size == 2) {
+                                    alignedRow[3] = numericCells[0]
+                                    alignedRow[4] = numericCells[1]
+                                } else if (numericCells.size >= 3) {
+                                    alignedRow[3] = numericCells[0]
+                                    alignedRow[4] = numericCells[1]
+                                    alignedRow[5] = numericCells[2]
+                                }
+                            }
+                            rowSplit = alignedRow
+                        } else {
+                            val newRow = mutableListOf<String>()
+                            val mergeTargets = setOf("999", "005", "001", "05", "01")
+                            for (cell in rowSplit) {
+                                if (mergeTargets.contains(cell) && newRow.isNotEmpty()) {
+                                    val lastIdx = newRow.size - 1
+                                    val lastVal = newRow[lastIdx]
+                                    newRow[lastIdx] = if (lastVal.isEmpty()) cell else "$lastVal $cell"
+                                } else {
+                                    newRow.add(cell)
+                                }
+                            }
+                            rowSplit = newRow
                         }
-                        rowSplit = newRow
                     }
 
                     val excelRow = sheet.createRow(excelRowIndex)
