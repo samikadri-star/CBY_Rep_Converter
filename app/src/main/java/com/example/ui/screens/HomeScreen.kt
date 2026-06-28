@@ -57,12 +57,20 @@ fun HomeScreen(
     var selectedEncodingIdx by remember { mutableStateOf(0) }
     var showEncodingMenu by remember { mutableStateOf(false) }
 
+    var selectedUris by remember { mutableStateOf<List<Uri>>(emptyList()) }
+
     // Multi-file selection launcher
     val fileLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenMultipleDocuments()
     ) { uris ->
         if (!uris.isNullOrEmpty()) {
-            viewModel.convertFiles(uris, encodingOptions[selectedEncodingIdx].first)
+            selectedUris = uris
+        }
+    }
+
+    val selectedFilesInfo = remember(selectedUris) {
+        selectedUris.map { uri ->
+            uri to getFileNameFromUri(context, uri)
         }
     }
 
@@ -222,7 +230,7 @@ fun HomeScreen(
                                         modifier = Modifier
                                             .fillMaxWidth()
                                             .height(54.dp)
-                                            .testTag("import_and_convert_button"),
+                                            .testTag("select_files_button"),
                                         colors = ButtonDefaults.buttonColors(
                                             containerColor = accentBlue,
                                             contentColor = Color.White
@@ -235,11 +243,112 @@ fun HomeScreen(
                                             horizontalArrangement = Arrangement.Center
                                         ) {
                                             Text(
-                                                text = "📂 اختر الملفات للبدء",
+                                                text = "📂 اختر الملفات من الجهاز",
                                                 fontSize = 16.sp,
                                                 fontWeight = FontWeight.Bold,
                                                 color = Color.White
                                             )
+                                        }
+                                    }
+
+                                    // Display list of selected files
+                                    if (selectedFilesInfo.isNotEmpty()) {
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        Text(
+                                            text = "الملفات المحددة (${selectedFilesInfo.size}):",
+                                            fontSize = 14.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = slate800,
+                                            modifier = Modifier.fillMaxWidth()
+                                        )
+                                        Column(
+                                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                                            modifier = Modifier.fillMaxWidth()
+                                        ) {
+                                            selectedFilesInfo.forEach { (uri, name) ->
+                                                Row(
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .background(Color(0xFFF1F5F9), RoundedCornerShape(12.dp))
+                                                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                                                    verticalAlignment = Alignment.CenterVertically,
+                                                    horizontalArrangement = Arrangement.SpaceBetween
+                                                ) {
+                                                    Row(
+                                                        verticalAlignment = Alignment.CenterVertically,
+                                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                                        modifier = Modifier.weight(1f)
+                                                    ) {
+                                                        Icon(
+                                                            imageVector = Icons.Default.Description,
+                                                            contentDescription = null,
+                                                            tint = accentBlue,
+                                                            modifier = Modifier.size(20.dp)
+                                                        )
+                                                        Text(
+                                                            text = name,
+                                                            fontSize = 13.sp,
+                                                            color = slate800,
+                                                            maxLines = 1,
+                                                            overflow = TextOverflow.Ellipsis
+                                                        )
+                                                    }
+                                                    IconButton(
+                                                        onClick = {
+                                                            selectedUris = selectedUris.filter { it != uri }
+                                                        },
+                                                        modifier = Modifier.size(32.dp)
+                                                    ) {
+                                                        Icon(
+                                                            imageVector = Icons.Default.Close,
+                                                            contentDescription = "إزالة",
+                                                            tint = Color.Red,
+                                                            modifier = Modifier.size(18.dp)
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                        }
+
+                                        Spacer(modifier = Modifier.height(4.dp))
+
+                                        // Start conversion button
+                                        Button(
+                                            onClick = {
+                                                if (!isConverting) {
+                                                    viewModel.convertFiles(selectedUris, encodingOptions[selectedEncodingIdx].first)
+                                                    selectedUris = emptyList()
+                                                }
+                                            },
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .height(54.dp)
+                                                .testTag("import_and_convert_button"),
+                                            colors = ButtonDefaults.buttonColors(
+                                                containerColor = Color(0xFF10B981), // Emerald green
+                                                contentColor = Color.White
+                                            ),
+                                            shape = RoundedCornerShape(16.dp),
+                                            enabled = !isConverting
+                                        ) {
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.Center
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.PlayArrow,
+                                                    contentDescription = null,
+                                                    tint = Color.White,
+                                                    modifier = Modifier.size(24.dp)
+                                                )
+                                                Spacer(modifier = Modifier.width(8.dp))
+                                                Text(
+                                                    text = "🚀 بدء عملية التحويل الآن",
+                                                    fontSize = 16.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = Color.White
+                                                )
+                                            }
                                         }
                                     }
 
@@ -844,4 +953,30 @@ fun HistoryCard(
             }
         }
     }
+}
+
+fun getFileNameFromUri(context: android.content.Context, uri: Uri): String {
+    var result: String? = null
+    if (uri.scheme == "content") {
+        try {
+            context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+                if (cursor.moveToFirst()) {
+                    val nameIndex = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                    if (nameIndex != -1) {
+                        result = cursor.getString(nameIndex)
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+    if (result == null) {
+        result = uri.path
+        val cut = result?.lastIndexOf('/')
+        if (cut != null && cut != -1) {
+            result = result?.substring(cut + 1)
+        }
+    }
+    return result ?: "ملف غير معروف"
 }
