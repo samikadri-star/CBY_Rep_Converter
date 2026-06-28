@@ -94,7 +94,9 @@ object ExcelConverter {
         val isTargetReport = lowercaseName.startsWith("glrfdj") || 
                              lowercaseName.startsWith("cir1sa") || 
                              lowercaseName.startsWith("glrddj") || 
-                             lowercaseName.startsWith("cir1samo")
+                             lowercaseName.startsWith("cir1samo") ||
+                             lowercaseName.startsWith("glr2dj") ||
+                             lowercaseName.startsWith("glr2")
 
         var excelRowIndex = 0
         var hasAtLeastOneRow = false
@@ -142,15 +144,39 @@ object ExcelConverter {
                                                    rowText.contains("المجموع") ||
                                                    rowText.contains("مجموع")
 
-                        if (isSpecialSummaryRow && rowSplit.size == 5) {
-                            val aligned = mutableListOf<String>()
-                            aligned.add(rowSplit[0]) // Date / First field
-                            aligned.add("")          // Empty Reference (المرجع) placeholder
-                            aligned.add(rowSplit[1]) // Statement / Label (البيان)
-                            aligned.add(rowSplit[2]) // منه (Debit)
-                            aligned.add(rowSplit[3]) // له (Credit)
-                            aligned.add(rowSplit[4]) // الرصيد (Balance)
-                            rowSplit = aligned
+                        val isNumeric = { str: String ->
+                            val clean = str.replace(",", "").trim()
+                            clean.toDoubleOrNull() != null
+                        }
+
+                        if (rowSplit.size == 5) {
+                            val lastThreeAreFinancial = (rowSplit[2].isEmpty() || isNumeric(rowSplit[2])) &&
+                                                        (rowSplit[3].isEmpty() || isNumeric(rowSplit[3])) &&
+                                                        (rowSplit[4].isEmpty() || isNumeric(rowSplit[4]))
+                            if (isSpecialSummaryRow || lastThreeAreFinancial) {
+                                val aligned = mutableListOf<String>()
+                                aligned.add(rowSplit[0]) // Date / First field
+                                aligned.add("")          // Empty Reference (المرجع) placeholder
+                                aligned.add(rowSplit[1]) // Statement / Label (البيان)
+                                aligned.add(rowSplit[2]) // منه (Debit)
+                                aligned.add(rowSplit[3]) // له (Credit)
+                                aligned.add(rowSplit[4]) // الرصيد (Balance)
+                                rowSplit = aligned
+                            }
+                        } else if (rowSplit.size == 4) {
+                            val lastThreeAreFinancial = (rowSplit[1].isEmpty() || isNumeric(rowSplit[1])) &&
+                                                        (rowSplit[2].isEmpty() || isNumeric(rowSplit[2])) &&
+                                                        (rowSplit[3].isEmpty() || isNumeric(rowSplit[3]))
+                            if (isSpecialSummaryRow || lastThreeAreFinancial) {
+                                val aligned = mutableListOf<String>()
+                                aligned.add("")          // Empty Date placeholder
+                                aligned.add("")          // Empty Reference (المرجع) placeholder
+                                aligned.add(rowSplit[0]) // Statement / Label (البيان)
+                                aligned.add(rowSplit[1]) // منه (Debit)
+                                aligned.add(rowSplit[2]) // له (Credit)
+                                aligned.add(rowSplit[3]) // الرصيد (Balance)
+                                rowSplit = aligned
+                            }
                         }
                     }
 
